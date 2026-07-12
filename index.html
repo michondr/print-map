@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Wall Map Tiler</title>
-<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+<link rel="stylesheet" href="vendor/maplibre-gl.css">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -71,8 +71,11 @@
   <section>
     <h2>Print preview</h2>
     <div id="info" class="info">–</div>
+    <button id="lockBtn" class="secondary">🔒 Lock area &amp; inspect</button>
     <p class="hint">The print renders at a higher map zoom than the screen,
-      so the PDF shows more detail than this preview.</p>
+      so the PDF shows more detail than this preview. Lock the area, then
+      zoom in to the shown print zoom to see exactly what each page will
+      contain.</p>
   </section>
 
   <button id="exportBtn">Export PDF</button>
@@ -89,8 +92,8 @@
   <canvas id="overlay"></canvas>
 </div>
 
-<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js"></script>
+<script src="vendor/maplibre-gl.js"></script>
+<script src="vendor/jspdf.umd.min.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

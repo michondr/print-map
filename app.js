@@ -25,6 +25,8 @@ const CATEGORIES = [
 
 let map;
 let layerCategory = {};   // style layer id -> category key
+let lockedNW = null;      // LngLat of print-area corners while locked,
+let lockedSE = null;      // null = frame follows the screen
 
 /* ---------------------------------------------------------------- params */
 
@@ -83,6 +85,30 @@ function frameRect(p) {
   return { x: (W - p.coveredW * k) / 2, y: (H - p.coveredH * k) / 2, w: p.coveredW * k, h: p.coveredH * k, k };
 }
 
+// Geographic corners of the print area. While locked these are pinned to the
+// map; the SE corner is re-derived from the paper aspect ratio so that
+// changing wall/page settings keeps the area consistent.
+function areaBounds(p) {
+  if (lockedNW) {
+    const a = maplibregl.MercatorCoordinate.fromLngLat(lockedNW);
+    const b = maplibregl.MercatorCoordinate.fromLngLat(lockedSE);
+    const y2 = a.y + (b.x - a.x) * p.coveredH / p.coveredW;
+    return { nw: lockedNW, se: new maplibregl.MercatorCoordinate(b.x, y2, 0).toLngLat() };
+  }
+  const f = frameRect(p);
+  return { nw: map.unproject([f.x, f.y]), se: map.unproject([f.x + f.w, f.y + f.h]) };
+}
+
+// Screen-pixel rectangle of the print area (projected when locked).
+function viewRect(p) {
+  if (lockedNW) {
+    const { nw, se } = areaBounds(p);
+    const a = map.project(nw), b = map.project(se);
+    return { x: a.x, y: a.y, w: b.x - a.x, h: b.y - a.y, k: (b.x - a.x) / p.coveredW };
+  }
+  return frameRect(p);
+}
+
 function drawOverlay() {
   const cv = $('overlay'), el = $('map');
   const W = el.clientWidth, H = el.clientHeight;
@@ -93,9 +119,9 @@ function drawOverlay() {
   ctx.scale(dpr, dpr);
   const p = params();
   if (p.error) return;
-  const f = frameRect(p);
+  const f = viewRect(p);
 
-  ctx.fillStyle = 'rgba(15,18,24,.45)';
+  ctx.fillStyle = lockedNW ? 'rgba(15,18,24,.25)' : 'rgba(15,18,24,.45)';
   ctx.beginPath();
   ctx.rect(0, 0, W, H);
   ctx.rect(f.x, f.y, f.w, f.h);
@@ -118,7 +144,7 @@ function drawOverlay() {
   }
   ctx.stroke();
 
-  ctx.strokeStyle = '#fff';
+  ctx.strokeStyle = lockedNW ? '#3ad67e' : '#fff';
   ctx.lineWidth = 2;
   ctx.strokeRect(f.x, f.y, f.w, f.h);
 }
@@ -136,16 +162,15 @@ function updateInfo() {
   lines.push(`Assembled: <b>${(p.coveredW / 10).toFixed(1)} × ${(p.coveredH / 10).toFixed(1)} cm</b>` +
              ` (wall ${p.wallW / 10} × ${p.wallH / 10})`);
   if (map) {
-    const f = frameRect(p);
-    const a = map.unproject([f.x, f.y]);
-    const b = map.unproject([f.x + f.w, f.y + f.h]);
-    const midLat = (a.lat + b.lat) / 2;
-    const metres = (b.lng - a.lng) / 360 * EARTH_CIRC * Math.cos(midLat * Math.PI / 180);
+    const { nw, se } = areaBounds(p);
+    const midLat = (nw.lat + se.lat) / 2;
+    const metres = (se.lng - nw.lng) / 360 * EARTH_CIRC * Math.cos(midLat * Math.PI / 180);
     if (metres > 0) {
       lines.push(`Map width: ${(metres / 1000).toFixed(2)} km — scale ≈ <b>1 : ${Math.round(metres / (p.coveredW / 1000)).toLocaleString('en')}</b>`);
       const cssW = p.coveredW / MM_PER_IN * CSS_DPI;
-      const zPrint = Math.log2(cssW / (512 * (b.lng - a.lng) / 360));
-      lines.push(`Print ≈ <b>${Math.round(exportDPI(p))} dpi</b>, map zoom ${zPrint.toFixed(1)} (screen ${map.getZoom().toFixed(1)})`);
+      const zPrint = Math.log2(cssW / (512 * (se.lng - nw.lng) / 360));
+      lines.push(`Print ≈ <b>${Math.round(exportDPI(p))} dpi</b>, map zoom <b>${zPrint.toFixed(1)}</b> (screen ${map.getZoom().toFixed(1)})`);
+      if (lockedNW) lines.push('<b style="color:#3ad67e">Area locked</b> — pan/zoom freely to inspect.');
     }
   }
   if (p.cols * p.rows > 120) lines.push('<b>⚠ over 120 pages</b> — is that intended?');
@@ -228,9 +253,7 @@ async function exportPDF() {
   btn.disabled = true;
   let em = null, holder = null;
   try {
-    const f = frameRect(p);
-    const nw = map.unproject([f.x, f.y]);
-    const se = map.unproject([f.x + f.w, f.y + f.h]);
+    const { nw, se } = areaBounds(p);
     const dpi = exportDPI(p);
 
     // CSS pixel size fixes the physical size of labels/line widths (96 dpi
@@ -431,6 +454,28 @@ function buildCategoryUI() {
   }
 }
 
+function toggleLock() {
+  const p = params();
+  if (p.error) return;
+  if (lockedNW) {
+    // keep showing the same area: fit it into the free-floating frame
+    const { nw, se } = areaBounds(p);
+    const f = frameRect(p);
+    lockedNW = lockedSE = null;
+    map.fitBounds([[nw.lng, se.lat], [se.lng, nw.lat]], {
+      padding: { top: f.y, bottom: f.y, left: f.x, right: f.x },
+      duration: 0,
+    });
+    $('lockBtn').textContent = '🔒 Lock area & inspect';
+  } else {
+    const b = areaBounds(p);
+    lockedNW = b.nw;
+    lockedSE = b.se;
+    $('lockBtn').textContent = '🔓 Unlock area';
+  }
+  refresh();
+}
+
 function init() {
   buildCategoryUI();
 
@@ -447,7 +492,10 @@ function init() {
   map.touchZoomRotate.disableRotation();
   map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
   map.on('load', () => { buildCategories(); refresh(); });
-  map.on('move', updateInfo);
+  map.on('move', () => {
+    if (lockedNW) drawOverlay();  // grid is pinned to the map while locked
+    updateInfo();
+  });
 
   $('style').onchange = () => {
     map.setStyle(STYLES[$('style').value]);
@@ -463,6 +511,7 @@ function init() {
   $('q').addEventListener('keydown', (e) => { if (e.key === 'Enter') doSearch(); });
   $('exportBtn').onclick = exportPDF;
   $('calibBtn').onclick = calibrationPDF;
+  $('lockBtn').onclick = toggleLock;
 
   refresh();
 }
