@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wall Map Tiler</title>
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<aside id="sidebar">
+  <h1>Wall Map Tiler</h1>
+  <p class="sub">Print any map area as A4 tiles, cut, glue, done.</p>
+
+  <section>
+    <h2>Find a place</h2>
+    <div class="row">
+      <input id="q" type="text" placeholder="e.g. Brno, Petrov" autocomplete="off">
+      <button id="searchBtn" class="small">Search</button>
+    </div>
+    <ul id="results"></ul>
+  </section>
+
+  <section>
+    <h2>Wall size</h2>
+    <div class="row">
+      <label>Width <input id="wallW" type="number" min="10" step="1" value="200"> cm</label>
+      <label>Height <input id="wallH" type="number" min="10" step="1" value="150"> cm</label>
+    </div>
+    <div class="row">
+      <label>Pages
+        <select id="orient">
+          <option value="portrait">A4 portrait</option>
+          <option value="landscape">A4 landscape</option>
+        </select>
+      </label>
+    </div>
+  </section>
+
+  <section>
+    <h2>Printer</h2>
+    <p class="hint">Unprintable margins of your printer (mm). Print the
+      calibration sheet at 100&nbsp;% scale to measure them.</p>
+    <div class="grid4">
+      <label>Top <input id="mTop" type="number" min="0" step="0.5" value="5"></label>
+      <label>Right <input id="mRight" type="number" min="0" step="0.5" value="5"></label>
+      <label>Bottom <input id="mBottom" type="number" min="0" step="0.5" value="5"></label>
+      <label>Left <input id="mLeft" type="number" min="0" step="0.5" value="5"></label>
+    </div>
+    <div class="row">
+      <label>Glue overlap <input id="overlap" type="number" min="0" step="1" value="6"> mm</label>
+      <label class="chk"><input id="pageLabels" type="checkbox" checked> page labels</label>
+    </div>
+    <button id="calibBtn" class="secondary">Print calibration sheet (PDF)</button>
+  </section>
+
+  <section>
+    <h2>Map content</h2>
+    <div class="row">
+      <label>Style
+        <select id="style">
+          <option value="liberty">Liberty (colourful)</option>
+          <option value="bright">Bright</option>
+          <option value="positron">Positron (light grey)</option>
+        </select>
+      </label>
+    </div>
+    <div id="cats" class="cats"></div>
+  </section>
+
+  <section>
+    <h2>Print preview</h2>
+    <div id="info" class="info">–</div>
+    <p class="hint">The print renders at a higher map zoom than the screen,
+      so the PDF shows more detail than this preview.</p>
+  </section>
+
+  <button id="exportBtn">Export PDF</button>
+  <div id="status" class="status"></div>
+
+  <footer>
+    Map data © <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a>
+    contributors · tiles by <a href="https://openfreemap.org" target="_blank">OpenFreeMap</a>
+  </footer>
+</aside>
+
+<div id="mapwrap">
+  <div id="map"></div>
+  <canvas id="overlay"></canvas>
+</div>
+
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
