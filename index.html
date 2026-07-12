@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Wall Map Tiler</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
 <link rel="stylesheet" href="style.css">
 </head>
@@ -65,6 +66,18 @@
         </select>
       </label>
     </div>
+    <div class="row">
+      <label>Detail
+        <select id="detail">
+          <option value="0">standard — full-size labels</option>
+          <option value="1" selected>high — +1 zoom, ½-size labels</option>
+          <option value="2">maximum — +2 zoom, ¼-size labels</option>
+        </select>
+      </label>
+    </div>
+    <p class="hint">Higher detail exports at a deeper map zoom: more streets,
+      names and buildings on every page, at the cost of smaller print. The
+      resulting zoom is shown under Print preview.</p>
     <div id="cats" class="cats"></div>
   </section>
 
@@ -72,10 +85,10 @@
     <h2>Print preview</h2>
     <div id="info" class="info">–</div>
     <button id="lockBtn" class="secondary">🔒 Lock area &amp; inspect</button>
-    <p class="hint">The print renders at a higher map zoom than the screen,
-      so the PDF shows more detail than this preview. Lock the area, then
-      zoom in to the shown print zoom to see exactly what each page will
-      contain.</p>
+    <p class="hint">The PDF contains exactly the features the map shows at
+      the print zoom above — not at whatever zoom you inspect with. Lock the
+      area, then zoom to the print zoom to preview the content of a page;
+      raise <b>Detail</b> if streets or labels are missing at that zoom.</p>
   </section>
 
   <button id="exportBtn">Export PDF</button>

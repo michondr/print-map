@@ -27,6 +27,7 @@ let map;
 let layerCategory = {};   // style layer id -> category key
 let lockedNW = null;      // LngLat of print-area corners while locked,
 let lockedSE = null;      // null = frame follows the screen
+let hoverTile = null;     // {r, c} under the cursor while locked
 
 /* ---------------------------------------------------------------- params */
 
@@ -76,6 +77,15 @@ function exportDPI(p) {
   return Math.min(300, cap / (p.pw / MM_PER_IN), cap / (p.ph / MM_PER_IN));
 }
 
+// Extra map-zoom levels for the export. The style gates features by zoom
+// (minor streets, house numbers, POIs only appear at higher zooms), so a
+// large wall rendered at its physical-scale zoom looks empty per page.
+// Each +1 doubles the feature-density zoom and halves the printed size of
+// labels/line widths; the output dpi stays the same.
+function detailBoost() {
+  return parseInt($('detail').value, 10) || 0;
+}
+
 /* ------------------------------------------------------- frame + overlay */
 
 // Fixed on-screen frame with the assembled-map aspect ratio; the map pans
@@ -109,6 +119,20 @@ function viewRect(p) {
     return { x: a.x, y: a.y, w: b.x - a.x, h: b.y - a.y, k: (b.x - a.x) / p.coveredW };
   }
   return frameRect(p);
+}
+
+// Page tile under a #mapwrap-relative point; overlap strips count as the
+// right/bottom neighbour (whose content starts there).
+function tileAt(mx, my) {
+  const p = params();
+  if (p.error) return null;
+  const f = viewRect(p);
+  const x = (mx - f.x) / f.k, y = (my - f.y) / f.k;   // mm within the covered area
+  if (x < 0 || y < 0 || x > p.coveredW || y > p.coveredH) return null;
+  return {
+    r: Math.min(p.rows - 1, Math.floor(y / p.sy)),
+    c: Math.min(p.cols - 1, Math.floor(x / p.sx)),
+  };
 }
 
 function drawOverlay() {
@@ -149,6 +173,28 @@ function drawOverlay() {
   ctx.strokeStyle = lockedNW ? '#3ad67e' : '#fff';
   ctx.lineWidth = 2;
   ctx.strokeRect(f.x, f.y, f.w, f.h);
+
+  if (lockedNW && hoverTile) {
+    const tx = f.x + hoverTile.c * p.sx * f.k;
+    const ty = f.y + hoverTile.r * p.sy * f.k;
+    ctx.fillStyle = 'rgba(58,214,126,.10)';
+    ctx.fillRect(tx, ty, p.pw * f.k, p.ph * f.k);
+    ctx.strokeStyle = '#3ad67e';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(tx, ty, p.pw * f.k, p.ph * f.k);
+
+    // R/C badge in the tile's top-left corner, clamped into the viewport
+    const txt = `R${hoverTile.r + 1} C${hoverTile.c + 1}`;
+    ctx.font = '600 13px system-ui, sans-serif';
+    const bw = ctx.measureText(txt).width + 12, bh = 20;
+    const bx = Math.min(Math.max(tx + 5, 5), W - bw - 5);
+    const by = Math.min(Math.max(ty + 5, 5), H - bh - 5);
+    ctx.fillStyle = 'rgba(15,18,24,.85)';
+    ctx.fillRect(bx, by, bw, bh);
+    ctx.fillStyle = '#3ad67e';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(txt, bx + 6, by + bh / 2 + 1);
+  }
 }
 
 function updateInfo() {
@@ -170,9 +216,9 @@ function updateInfo() {
     if (metres > 0) {
       lines.push(`Map width: ${(metres / 1000).toFixed(2)} km — scale ≈ <b>1 : ${Math.round(metres / (p.coveredW / 1000)).toLocaleString('en')}</b>`);
       const cssW = p.coveredW / MM_PER_IN * CSS_DPI;
-      const zPrint = Math.log2(cssW / (512 * (se.lng - nw.lng) / 360));
+      const zPrint = Math.log2(cssW / (512 * (se.lng - nw.lng) / 360)) + detailBoost();
       lines.push(`Print ≈ <b>${Math.round(exportDPI(p))} dpi</b>, map zoom <b>${zPrint.toFixed(1)}</b> (screen ${map.getZoom().toFixed(1)})`);
-      if (lockedNW) lines.push('<b style="color:#3ad67e">Area locked</b> — pan/zoom freely to inspect.');
+      if (lockedNW) lines.push('<b style="color:#3ad67e">Area locked</b> — pan/zoom freely to inspect; hover a tile for its page (R C).');
     }
   }
   if (p.cols * p.rows > 120) lines.push('<b>⚠ over 120 pages</b> — is that intended?');
@@ -257,15 +303,18 @@ async function exportPDF() {
   try {
     const { nw, se } = areaBounds(p);
     const dpi = exportDPI(p);
+    const boost = detailBoost();
 
     // One hidden map the size of a single page, re-centred for every page,
     // so the render resolution is independent of the wall size. CSS pixel
-    // size fixes the physical size of labels/line widths (96 dpi reference);
+    // size fixes the physical size of labels/line widths (`ref` dpi
+    // reference — 96 css dpi divided down by the detail boost);
     // pixelRatio raises the real resolution up to `dpi`.
-    const cssW = p.coveredW / MM_PER_IN * CSS_DPI;   // assembled map in css px
+    const ref = CSS_DPI * 2 ** boost;
+    const cssW = p.coveredW / MM_PER_IN * ref;       // assembled map in css px
     const zoom = Math.log2(cssW / (512 * (se.lng - nw.lng) / 360));
-    const pageCssW = p.pw / MM_PER_IN * CSS_DPI;
-    const pageCssH = p.ph / MM_PER_IN * CSS_DPI;
+    const pageCssW = p.pw / MM_PER_IN * ref;
+    const pageCssH = p.ph / MM_PER_IN * ref;
     const c1 = maplibregl.MercatorCoordinate.fromLngLat(nw);
     const c2 = maplibregl.MercatorCoordinate.fromLngLat(se);
     const pageCenter = (r, c) => new maplibregl.MercatorCoordinate(
@@ -283,7 +332,7 @@ async function exportPDF() {
       bearing: 0, pitch: 0,
       interactive: false,
       attributionControl: false,
-      pixelRatio: dpi / CSS_DPI,
+      pixelRatio: dpi / ref,
       preserveDrawingBuffer: true,
       fadeDuration: 0,
       maxZoom: 24,
@@ -295,7 +344,7 @@ async function exportPDF() {
     const { jsPDF } = window.jspdf;
     const orientation = p.landscape ? 'landscape' : 'portrait';
     const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation, compress: true });
-    coverPage(pdf, p, { nw, se, dpi });
+    coverPage(pdf, p, { nw, se, dpi, zoom });
 
     const total = p.cols * p.rows;
     const pageCv = document.createElement('canvas');
@@ -357,7 +406,7 @@ function coverPage(pdf, p, x) {
     `Pages: ${p.cols} × ${p.rows} = ${p.cols * p.rows} (A4 ${p.landscape ? 'landscape' : 'portrait'})`,
     `Assembled size: ${(p.coveredW / 10).toFixed(1)} × ${(p.coveredH / 10).toFixed(1)} cm  (wall: ${p.wallW / 10} × ${p.wallH / 10} cm)`,
     `Scale ≈ 1 : ${scale.toLocaleString('en')}   ·   ${(metres / 1000).toFixed(2)} km wide`,
-    `Render: ${Math.round(x.dpi)} dpi   ·   printer margins T/R/B/L: ${p.m.t}/${p.m.r}/${p.m.b}/${p.m.l} mm   ·   overlap: ${p.overlap} mm`,
+    `Render: ${Math.round(x.dpi)} dpi at map zoom ${x.zoom.toFixed(1)}   ·   printer margins T/R/B/L: ${p.m.t}/${p.m.r}/${p.m.b}/${p.m.l} mm   ·   overlap: ${p.overlap} mm`,
     `Generated ${new Date().toISOString().slice(0, 10)}   ·   Map data © OpenStreetMap contributors, tiles by OpenFreeMap`,
   ];
   let y = 30;
@@ -375,8 +424,12 @@ function coverPage(pdf, p, x) {
   ];
   for (const line of steps) { pdf.text(line, 15, y); y += 5.5; }
 
-  // layout diagram
+  // layout diagram — each tile is an internal link to its map page
   y += 6;
+  pdf.setFontSize(9).setTextColor(120);
+  pdf.text('Overview — click a tile to jump to its page:', 15, y);
+  pdf.setTextColor(0);
+  y += 3;
   const boxW = p.pageW - 30, boxH = p.pageH - y - 15;
   const k = Math.min(boxW / p.coveredW, boxH / p.coveredH);
   const ox = 15, oy = y;
@@ -387,6 +440,10 @@ function coverPage(pdf, p, x) {
       const rx = ox + c * p.sx * k, ry = oy + r * p.sy * k;
       pdf.rect(rx, ry, p.pw * k, p.ph * k);
       pdf.text(`R${r + 1} C${c + 1}`, rx + p.pw * k / 2, ry + p.ph * k / 2, { align: 'center', baseline: 'middle' });
+      // link areas must not overlap, so clip each one to the grid step;
+      // map pages follow the cover (page 1) in row-major order
+      pdf.link(rx, ry, (c < p.cols - 1 ? p.sx : p.pw) * k, (r < p.rows - 1 ? p.sy : p.ph) * k,
+               { pageNumber: 2 + r * p.cols + c });
     }
   }
   pdf.setDrawColor(0).setLineWidth(0.5);
@@ -468,6 +525,7 @@ function toggleLock() {
     const { nw, se } = areaBounds(p);
     const f = frameRect(p);
     lockedNW = lockedSE = null;
+    hoverTile = null;
     map.fitBounds([[nw.lng, se.lat], [se.lng, nw.lat]], {
       padding: { top: f.y, bottom: f.y, left: f.x, right: f.x },
       duration: 0,
@@ -508,10 +566,21 @@ function init() {
     map.once('idle', buildCategories);
   };
 
-  for (const id of ['wallW', 'wallH', 'orient', 'mTop', 'mRight', 'mBottom', 'mLeft', 'overlap']) {
+  for (const id of ['wallW', 'wallH', 'orient', 'mTop', 'mRight', 'mBottom', 'mLeft', 'overlap', 'detail']) {
     $(id).addEventListener('input', refresh);
   }
   window.addEventListener('resize', refresh);
+
+  const wrap = $('mapwrap');
+  wrap.addEventListener('mousemove', (e) => {
+    if (!lockedNW) return;
+    const rect = wrap.getBoundingClientRect();
+    const t = tileAt(e.clientX - rect.left, e.clientY - rect.top);
+    if (t?.r !== hoverTile?.r || t?.c !== hoverTile?.c) { hoverTile = t; drawOverlay(); }
+  });
+  wrap.addEventListener('mouseleave', () => {
+    if (hoverTile) { hoverTile = null; drawOverlay(); }
+  });
 
   $('searchBtn').onclick = doSearch;
   $('q').addEventListener('keydown', (e) => { if (e.key === 'Enter') doSearch(); });
