@@ -1,5 +1,7 @@
 # Wall Map Tiler
 
+live at: https://michondr.github.io/print-map/
+
 Print any map area as A4 tiles, cut off the white margins, glue to a wall —
 edges match perfectly.
 

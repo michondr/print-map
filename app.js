@@ -69,9 +69,11 @@ function maxRenderPx() {
   return _maxPx;
 }
 
+// Pages are rendered one at a time, so only a single page has to fit into
+// the GPU's maximum canvas size — 300 dpi in practice, whatever the wall size.
 function exportDPI(p) {
   const cap = maxRenderPx();
-  return Math.min(300, cap / (p.coveredW / MM_PER_IN), cap / (p.coveredH / MM_PER_IN));
+  return Math.min(300, cap / (p.pw / MM_PER_IN), cap / (p.ph / MM_PER_IN));
 }
 
 /* ------------------------------------------------------- frame + overlay */
@@ -256,23 +258,28 @@ async function exportPDF() {
     const { nw, se } = areaBounds(p);
     const dpi = exportDPI(p);
 
-    // CSS pixel size fixes the physical size of labels/line widths (96 dpi
-    // reference); pixelRatio raises the real resolution up to `dpi`.
-    const cssW = p.coveredW / MM_PER_IN * CSS_DPI;
-    const cssH = p.coveredH / MM_PER_IN * CSS_DPI;
+    // One hidden map the size of a single page, re-centred for every page,
+    // so the render resolution is independent of the wall size. CSS pixel
+    // size fixes the physical size of labels/line widths (96 dpi reference);
+    // pixelRatio raises the real resolution up to `dpi`.
+    const cssW = p.coveredW / MM_PER_IN * CSS_DPI;   // assembled map in css px
     const zoom = Math.log2(cssW / (512 * (se.lng - nw.lng) / 360));
+    const pageCssW = p.pw / MM_PER_IN * CSS_DPI;
+    const pageCssH = p.ph / MM_PER_IN * CSS_DPI;
     const c1 = maplibregl.MercatorCoordinate.fromLngLat(nw);
     const c2 = maplibregl.MercatorCoordinate.fromLngLat(se);
-    const center = new maplibregl.MercatorCoordinate((c1.x + c2.x) / 2, (c1.y + c2.y) / 2, 0).toLngLat();
+    const pageCenter = (r, c) => new maplibregl.MercatorCoordinate(
+      c1.x + (c2.x - c1.x) * (c * p.sx + p.pw / 2) / p.coveredW,
+      c1.y + (c2.y - c1.y) * (r * p.sy + p.ph / 2) / p.coveredH, 0).toLngLat();
 
     status('Rendering map at print resolution — downloading tiles, this can take a minute…');
     holder = document.createElement('div');
-    holder.style.cssText = `position:fixed;top:0;left:-${Math.ceil(cssW) + 100}px;width:${cssW}px;height:${cssH}px;`;
+    holder.style.cssText = `position:fixed;top:0;left:-${Math.ceil(pageCssW) + 100}px;width:${pageCssW}px;height:${pageCssH}px;`;
     document.body.appendChild(holder);
     em = new maplibregl.Map({
       container: holder,
       style: STYLES[$('style').value],
-      center, zoom,
+      center: pageCenter(0, 0), zoom,
       bearing: 0, pitch: 0,
       interactive: false,
       attributionControl: false,
@@ -284,10 +291,6 @@ async function exportPDF() {
     await once(em, 'load');
     applyVisibility(em);
     await once(em, 'idle');
-    await raf();
-
-    const src = em.getCanvas();
-    const ppm = src.width / p.coveredW;  // rendered pixels per mm
 
     const { jsPDF } = window.jspdf;
     const orientation = p.landscape ? 'landscape' : 'portrait';
@@ -300,12 +303,15 @@ async function exportPDF() {
     let n = 0;
     for (let r = 0; r < p.rows; r++) {
       for (let c = 0; c < p.cols; c++) {
-        status(`Building page ${++n} / ${total}…`);
+        status(`Rendering page ${++n} / ${total}…`);
+        em.jumpTo({ center: pageCenter(r, c) });
+        await once(em, 'idle');
         await raf();
-        pageCv.width = Math.round(p.pw * ppm);
-        pageCv.height = Math.round(p.ph * ppm);
-        ctx.drawImage(src, c * p.sx * ppm, r * p.sy * ppm, p.pw * ppm, p.ph * ppm,
-                      0, 0, pageCv.width, pageCv.height);
+        const src = em.getCanvas();
+        const ppm = src.width / p.pw;  // rendered pixels per mm
+        pageCv.width = src.width;
+        pageCv.height = src.height;
+        ctx.drawImage(src, 0, 0);
         if ($('pageLabels').checked) drawPageLabel(ctx, pageCv, `R${r + 1} C${c + 1}`, ppm);
         pdf.addPage('a4', orientation);
         pdf.addImage(pageCv.toDataURL('image/jpeg', 0.92), 'JPEG', p.m.l, p.m.t, p.pw, p.ph);
