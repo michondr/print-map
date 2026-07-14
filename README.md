@@ -10,7 +10,9 @@ no build step, no backend, no API keys.
 
 - **Map data**: OpenStreetMap vector tiles served by [OpenFreeMap](https://openfreemap.org) (free, no key)
 - **Search**: OSM Nominatim geocoder
-- **Output**: multi-page PDF (cover sheet with assembly instructions + one A4 page per tile)
+- **Output**: multi-page PDF (cover sheet with assembly instructions + one
+  page per tile), or one JPEG/PNG per page for copy-centre large-format
+  printing (A4 or 150 × 100 cm poster pages)
 
 ## Usage
 
@@ -26,11 +28,12 @@ no build step, no backend, no API keys.
    top→bottom, gluing each new sheet over the previous ones. The repeated
    overlap strip makes alignment forgiving.
 
-The map for the whole wall is rendered in a single WebGL canvas and then
-sliced into pages, so lines *and text labels* continue seamlessly across
-sheet boundaries. Resolution auto-adjusts to your GPU's maximum canvas size
-(shown as dpi in the sidebar; large walls come out around 100–150 dpi, which
-is fine at wall-viewing distance).
+Every page is rendered at a single shared zoom, so lines *and text labels*
+continue seamlessly across sheet boundaries. Pages larger than the GPU's
+maximum canvas are rendered in several passes and stitched, so even the
+150 × 100 cm poster pages come out at 300 dpi in Chromium (~230 dpi in
+Firefox, whose canvas limits are lower — the sidebar shows the exact
+figure), which is plenty at wall-viewing distance.
 
 ## Deploy
 

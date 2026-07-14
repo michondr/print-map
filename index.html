@@ -25,17 +25,23 @@
   <section>
     <h2>Wall size</h2>
     <div class="row">
-      <label>Width <input id="wallW" type="number" min="10" step="1" value="200"> cm</label>
-      <label>Height <input id="wallH" type="number" min="10" step="1" value="150"> cm</label>
+      <label>Width <input id="wallW" type="number" min="10" step="1" value="180"> cm</label>
+      <label>Height <input id="wallH" type="number" min="10" step="1" value="250"> cm</label>
     </div>
     <div class="row">
       <label>Pages
         <select id="orient">
           <option value="portrait">A4 portrait</option>
           <option value="landscape">A4 landscape</option>
+          <option value="largePortrait">100 × 150 cm poster (print shop)</option>
+          <option value="largeLandscape">150 × 100 cm poster (print shop)</option>
         </select>
       </label>
     </div>
+    <p class="hint" id="largeHint" style="display:none">Large-format photo
+      posters (e.g. <a href="https://www.copygeneral.cz/fotoprodukty/fotoplakaty"
+      target="_blank">Copy General fotoplakaty</a>) are printed borderless,
+      so the printer margins below don't apply.</p>
   </section>
 
   <section>
@@ -79,6 +85,9 @@
       names and buildings on every page, at the cost of smaller print. The
       resulting zoom is shown under Print preview.</p>
     <div id="cats" class="cats"></div>
+    <div class="row">
+      <label class="chk"><input id="bikePaths" type="checkbox"> highlight bike paths (purple)</label>
+    </div>
   </section>
 
   <section>
@@ -91,7 +100,27 @@
       raise <b>Detail</b> if streets or labels are missing at that zoom.</p>
   </section>
 
-  <button id="exportBtn">Export PDF</button>
+  <section>
+    <h2>Output</h2>
+    <div class="row">
+      <label>Format
+        <select id="outFmt">
+          <option value="pdf">single PDF (all pages)</option>
+          <option value="jpeg">JPEG per page + cover PDF</option>
+          <option value="png">PNG per page + cover PDF</option>
+        </select>
+      </label>
+    </div>
+    <div class="row">
+      <label class="chk"><input id="wallGrid" type="checkbox"> add 10 × 10 cm grid</label>
+    </div>
+    <p class="hint">Copy centres usually take JPEG/PNG directly; one file per
+      page, named by its grid position (R1C1…). The optional grid is spaced
+      10 cm in printed size and continues across sheets — measure it to
+      verify scale, look at the hairlines to judge sharpness.</p>
+  </section>
+
+  <button id="exportBtn">Export</button>
   <div id="status" class="status"></div>
 
   <footer>
